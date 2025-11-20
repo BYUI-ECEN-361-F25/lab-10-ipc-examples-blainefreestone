@@ -106,10 +106,36 @@ const osThreadAttr_t DebounceTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for ASemaphoreToggl */
+osThreadId_t ASemaphoreTogglHandle;
+const osThreadAttr_t ASemaphoreToggl_attributes = {
+  .name = "ASemaphoreToggl",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
+};
+/* Definitions for BSemaphoreToggl */
+osThreadId_t BSemaphoreTogglHandle;
+const osThreadAttr_t BSemaphoreToggl_attributes = {
+  .name = "BSemaphoreToggl",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for DisplayReset */
+osThreadId_t DisplayResetHandle;
+const osThreadAttr_t DisplayReset_attributes = {
+  .name = "DisplayReset",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityIdle,
+};
 /* Definitions for SW_Timer_7Seg */
 osTimerId_t SW_Timer_7SegHandle;
 const osTimerAttr_t SW_Timer_7Seg_attributes = {
   .name = "SW_Timer_7Seg"
+};
+/* Definitions for SevenSegSWTimer */
+osTimerId_t SevenSegSWTimerHandle;
+const osTimerAttr_t SevenSegSWTimer_attributes = {
+  .name = "SevenSegSWTimer"
 };
 /* Definitions for UpDownMutex */
 osMutexId_t UpDownMutexHandle;
@@ -165,7 +191,11 @@ void Mutex_CountDownTask(void *argument);
 void UpdateGlobDisplayProcess(void *argument);
 void ResetGlobalTask(void *argument);
 void StartDebounce(void *argument);
+void Semaphore_Toggle_Task_D4(void *argument);
+void Semaphore_Toggle_Task_D3(void *argument);
+void Display_Reset_Task(void *argument);
 void SW_Timer_Countdown(void *argument);
+void Seven_Seg_SW_Timer_Callback(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -248,8 +278,12 @@ int main(void)
   /* creation of SW_Timer_7Seg */
   SW_Timer_7SegHandle = osTimerNew(SW_Timer_Countdown, osTimerPeriodic, NULL, &SW_Timer_7Seg_attributes);
 
+  /* creation of SevenSegSWTimer */
+  SevenSegSWTimerHandle = osTimerNew(Seven_Seg_SW_Timer_Callback, osTimerPeriodic, NULL, &SevenSegSWTimer_attributes);
+
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
+	osTimerStart(SevenSegSWTimerHandle , 1);
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
@@ -280,6 +314,15 @@ int main(void)
 
   /* creation of DebounceTask */
   DebounceTaskHandle = osThreadNew(StartDebounce, NULL, &DebounceTask_attributes);
+
+  /* creation of ASemaphoreToggl */
+  ASemaphoreTogglHandle = osThreadNew(Semaphore_Toggle_Task_D4, NULL, &ASemaphoreToggl_attributes);
+
+  /* creation of BSemaphoreToggl */
+  BSemaphoreTogglHandle = osThreadNew(Semaphore_Toggle_Task_D3, NULL, &BSemaphoreToggl_attributes);
+
+  /* creation of DisplayReset */
+  DisplayResetHandle = osThreadNew(Display_Reset_Task, NULL, &DisplayReset_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -637,7 +680,7 @@ void SW_Timer_Task(void *argument)
 	if (osTimerIsRunning(SW_Timer_7SegHandle))
 		osTimerStop(SW_Timer_7SegHandle );
 	else
-		osTimerStart(SW_Timer_7SegHandle , 200);
+		osTimerStart(SW_Timer_7SegHandle , 1000);
     osDelay(1);
   }
   /* USER CODE END SW_Timer_Task */
@@ -779,6 +822,72 @@ void StartDebounce(void *argument)
   /* USER CODE END StartDebounce */
 }
 
+/* USER CODE BEGIN Header_Semaphore_Toggle_Task_D4 */
+/**
+* @brief Function implementing the SemaphoreToggle thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_Semaphore_Toggle_Task_D4 */
+void Semaphore_Toggle_Task_D4(void *argument)
+{
+  /* USER CODE BEGIN Semaphore_Toggle_Task_D4 */
+  /* Infinite loop */
+  for(;;)
+  {
+	osSemaphoreAcquire(Button_1_SemaphoreHandle,osWaitForever);
+	HAL_GPIO_TogglePin(LED_D4_GPIO_Port , LED_D4_Pin);
+    osDelay(1);
+  }
+  /* USER CODE END Semaphore_Toggle_Task_D4 */
+}
+
+/* USER CODE BEGIN Header_Semaphore_Toggle_Task_D3 */
+/**
+* @brief Function implementing the BSemaphoreToggl thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_Semaphore_Toggle_Task_D3 */
+void Semaphore_Toggle_Task_D3(void *argument)
+{
+  /* USER CODE BEGIN Semaphore_Toggle_Task_D3 */
+  /* Infinite loop */
+  for(;;)
+  {
+	osSemaphoreAcquire(Button_1_SemaphoreHandle,osWaitForever);
+	HAL_GPIO_TogglePin(LED_D3_GPIO_Port , LED_D3_Pin);
+	osDelay(1);
+  }
+  /* USER CODE END Semaphore_Toggle_Task_D3 */
+}
+
+/* USER CODE BEGIN Header_Display_Reset_Task */
+/**
+* @brief Function implementing the DisplayReset thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_Display_Reset_Task */
+void Display_Reset_Task(void *argument)
+{
+  /* USER CODE BEGIN Display_Reset_Task */
+  /* Infinite loop */
+    for(;;)
+        {
+        /* This doesn't change the value, it just clears the display  */
+        /* If asked to display a negative number, the function displays a "--"
+        */
+    	osSemaphoreAcquire(Button_3_SemaphoreHandle,osWaitForever);
+        osMutexWait(UpDownMutexHandle,osWaitForever);
+        MultiFunctionShield_Display_Two_Digits(-1);
+        osDelay(200);
+        osMutexRelease(UpDownMutexHandle);
+        osDelay(2);
+        }
+  /* USER CODE END Display_Reset_Task */
+}
+
 /* SW_Timer_Countdown function */
 void SW_Timer_Countdown(void *argument)
 {
@@ -798,6 +907,14 @@ void SW_Timer_Countdown(void *argument)
   /* USER CODE END SW_Timer_Countdown */
 }
 
+/* Seven_Seg_SW_Timer_Callback function */
+void Seven_Seg_SW_Timer_Callback(void *argument)
+{
+  /* USER CODE BEGIN Seven_Seg_SW_Timer_Callback */
+	MultiFunctionShield__ISRFunc();
+  /* USER CODE END Seven_Seg_SW_Timer_Callback */
+}
+
 /**
   * @brief  Period elapsed callback in non blocking mode
   * @note   This function is called  when TIM3 interrupt took place, inside
@@ -815,10 +932,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  if (htim == &htim17 )
-  {
-	  MultiFunctionShield__ISRFunc();
-  }
+//  if (htim == &htim17 )
+//  {
+//	  MultiFunctionShield__ISRFunc();
+//  }
 
   /* USER CODE END Callback 1 */
 }
